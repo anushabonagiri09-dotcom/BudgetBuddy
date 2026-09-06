@@ -1,0 +1,150 @@
+{
+  "info": {
+    "name": "BudgetBuddy",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Signup",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"test@example.com\", \"password\": \"secret123\", \"full_name\": \"Test User\"}"
+        },
+        "url": {
+          "raw": "{{base}}/auth/signup"
+        }
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "username",
+              "value": "test@example.com"
+            },
+            {
+              "key": "password",
+              "value": "secret123"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base}}/auth/login"
+        }
+      }
+    },
+    {
+      "name": "Me",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/auth/me"
+        }
+      }
+    },
+    {
+      "name": "Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/dashboard/"
+        }
+      }
+    },
+    {
+      "name": "Add Expense",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"category\": \"Food\", \"amount\": 250, \"date\": \"2026-08-11\", \"payment_method\": \"Cash\"}"
+        },
+        "url": {
+          "raw": "{{base}}/expense/"
+        }
+      }
+    },
+    {
+      "name": "Add Income",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"source\": \"Scholarship\", \"amount\": 5000, \"date\": \"2026-08-11\", \"payment_method\": \"Cash\"}"
+        },
+        "url": {
+          "raw": "{{base}}/income/"
+        }
+      }
+    },
+    {
+      "name": "Analytics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/analytics/summary"
+        }
+      }
+    }
+  ]
+}
