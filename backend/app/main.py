@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
+from app.models import User
+from app.core.security import hash_password
 from app.config import FRONTEND_URL
 from app import models  # noqa: F401
 
@@ -80,3 +82,45 @@ def db_test():
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
     return {"status": "Database connected successfully!"}
+@app.get("/setup-admin")
+def setup_admin():
+    db = SessionLocal()
+
+    try:
+        email = "admin@gmail.com"
+        password = "admin123"
+
+        user = db.query(User).filter(User.email == email).first()
+
+        if user:
+            user.hashed_password = hash_password(password)
+            user.role = "admin"
+            user.is_active = True
+            message = "Existing user converted to admin."
+        else:
+            user = User(
+                email=email,
+                hashed_password=hash_password(password),
+                role="admin",
+                is_active=True,
+            )
+            db.add(user)
+            message = "New admin account created."
+
+        db.commit()
+
+        return {
+            "message": message,
+            "email": email,
+            "role": "admin",
+        }
+
+    except Exception as error:
+        db.rollback()
+        return {
+            "message": "Admin setup failed.",
+            "error": str(error),
+        }
+
+    finally:
+        db.close()
