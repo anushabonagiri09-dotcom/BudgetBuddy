@@ -1,78 +1,185 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
 import api from "../api";
 
 const AuthContext = createContext(null);
 
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(localStorage.getItem("token"));
+
+  const [token, setToken] = useState(
+    () => localStorage.getItem("token")
+  );
+
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(Boolean(token));
 
-  const loadUser = async () => {
-    try {
-      const response = await api.get("/auth/me");
-      setUser(response.data);
-      return response.data;
-    } catch (error) {
-      localStorage.removeItem("token");
-      setToken(null);
-      setUser(null);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [loading, setLoading] = useState(
+    () => Boolean(localStorage.getItem("token"))
+  );
 
+
+  // Check an existing login session only when
+  // the application starts.
   useEffect(() => {
-    if (token) {
-      loadUser();
-    } else {
+
+    const existingToken =
+      localStorage.getItem("token");
+
+    if (!existingToken) {
       setLoading(false);
+      return;
     }
-  }, [token]);
 
-  const login = async (email, password) => {
-    const body = new URLSearchParams();
 
-    body.append("username", email);
-    body.append("password", password);
+    const loadExistingUser = async () => {
 
-    const response = await api.post("/auth/login", body, {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
+      try {
 
-    const newToken = response.data.access_token;
+        const response = await api.get(
+          "/auth/me",
+          {
+            headers: {
+              Authorization:
+                `Bearer ${existingToken}`,
+            },
+          }
+        );
 
-    localStorage.setItem("token", newToken);
+        setUser(response.data);
+
+      } catch (error) {
+
+        console.error(
+          "Session expired or invalid:",
+          error
+        );
+
+        localStorage.removeItem("token");
+
+        setToken(null);
+        setUser(null);
+
+      } finally {
+
+        setLoading(false);
+
+      }
+    };
+
+
+    loadExistingUser();
+
+  }, []);
+
+
+  // LOGIN
+  const login = async (
+    email,
+    password
+  ) => {
+
+    const body =
+      new URLSearchParams();
+
+    body.append(
+      "username",
+      email.trim()
+    );
+
+    body.append(
+      "password",
+      password
+    );
+
+
+    // ONE login request.
+    const response = await api.post(
+      "/auth/login",
+      body,
+      {
+        headers: {
+          "Content-Type":
+            "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+
+    const newToken =
+      response.data.access_token;
+
+
+    localStorage.setItem(
+      "token",
+      newToken
+    );
+
     setToken(newToken);
 
-    // Load user details including role
-    const userResponse = await api.get("/auth/me", {
-      headers: {
-        Authorization: `Bearer ${newToken}`,
-      },
-    });
+    // User is already returned by /login.
+    // No extra /auth/me request here.
+    setUser(response.data.user);
 
-    setUser(userResponse.data);
+    setLoading(false);
 
-    return {
-      ...response.data,
-      user: userResponse.data,
-    };
-  };
 
-  const signup = async (payload) => {
-    const response = await api.post("/auth/signup", payload);
     return response.data;
   };
 
+
+  // SIGNUP
+  const signup = async (
+    payload
+  ) => {
+
+    const response = await api.post(
+      "/auth/signup",
+      payload
+    );
+
+    return response.data;
+  };
+
+
+  // LOGOUT
   const logout = () => {
+
     localStorage.removeItem("token");
+
     setToken(null);
     setUser(null);
+
   };
+
+
+  // Refresh user when required by another page.
+  const refreshUser = async () => {
+
+    try {
+
+      const response =
+        await api.get("/auth/me");
+
+      setUser(response.data);
+
+      return response.data;
+
+    } catch (error) {
+
+      localStorage.removeItem("token");
+
+      setToken(null);
+      setUser(null);
+
+      return null;
+    }
+  };
+
 
   return (
     <AuthContext.Provider
@@ -83,7 +190,7 @@ export function AuthProvider({ children }) {
         login,
         signup,
         logout,
-        refreshUser: loadUser,
+        refreshUser,
       }}
     >
       {children}
@@ -91,4 +198,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+
+export const useAuth = () =>
+  useContext(AuthContext);

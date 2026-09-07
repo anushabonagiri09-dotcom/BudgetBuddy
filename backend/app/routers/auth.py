@@ -26,6 +26,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 def serialize_user(user: User):
     profile = user.profile
+
     return {
         "id": user.id,
         "email": user.email,
@@ -39,10 +40,25 @@ def serialize_user(user: User):
 
 
 @router.post("/signup", response_model=UserOut, status_code=201)
-def signup(data: UserCreate, db: Session = Depends(get_db)):
-    if get_user_by_email(db, data.email):
-        raise HTTPException(400, "Email already registered")
-    user = create_user(db, data.email, data.password, data.full_name)
+def signup(
+    data: UserCreate,
+    db: Session = Depends(get_db),
+):
+    email = data.email.strip().lower()
+
+    if get_user_by_email(db, email):
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered",
+        )
+
+    user = create_user(
+        db,
+        email,
+        data.password,
+        data.full_name,
+    )
+
     return serialize_user(user)
 
 
@@ -51,15 +67,40 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = get_user_by_email(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(401, "Invalid email or password")
-    token = create_access_token({"sub": user.email, "role": user.role})
-    return {"access_token": token, "token_type": "bearer"}
+    email = form_data.username.strip().lower()
+
+    user = get_user_by_email(db, email)
+
+    if not user or not verify_password(
+        form_data.password,
+        user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+        )
+
+    token = create_access_token(
+        {
+            "sub": user.email,
+            "role": user.role,
+        }
+    )
+
+    # IMPORTANT:
+    # Return token and user together.
+    # This removes the extra /auth/me request after login.
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": serialize_user(user),
+    }
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
+def me(
+    current_user: User = Depends(get_current_user),
+):
     return serialize_user(current_user)
 
 
@@ -70,11 +111,16 @@ def update_profile(
     db: Session = Depends(get_db),
 ):
     profile = current_user.profile
+
     if not profile:
-        profile = Profile(user_id=current_user.id, full_name=data.full_name.strip())
+        profile = Profile(
+            user_id=current_user.id,
+            full_name=data.full_name.strip(),
+        )
         db.add(profile)
 
     cleaned_phone = data.phone.strip() if data.phone else None
+
     profile.full_name = data.full_name.strip()
     profile.phone = cleaned_phone
     profile.monthly_income = float(data.monthly_income)
@@ -82,6 +128,7 @@ def update_profile(
 
     db.commit()
     db.refresh(current_user)
+
     return serialize_user(current_user)
 
 
@@ -91,14 +138,28 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not verify_password(data.current_password, current_user.hashed_password):
-        raise HTTPException(400, "Current password is incorrect")
+    if not verify_password(
+        data.current_password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Current password is incorrect",
+        )
+
     if data.current_password == data.new_password:
-        raise HTTPException(400, "New password must be different from the current password")
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be different from the current password",
+        )
 
     current_user.hashed_password = hash_password(data.new_password)
+
     db.commit()
-    return {"message": "Password changed successfully"}
+
+    return {
+        "message": "Password changed successfully"
+    }
 
 
 @router.delete("/account")
@@ -107,11 +168,21 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not verify_password(data.password, current_user.hashed_password):
-        raise HTTPException(401, "Incorrect password")
+    if not verify_password(
+        data.password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect password",
+        )
+
     db.delete(current_user)
     db.commit()
-    return {"message": "Account deleted successfully"}
+
+    return {
+        "message": "Account deleted successfully"
+    }
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -120,9 +191,21 @@ def admin_users(
     db: Session = Depends(get_db),
 ):
     if current_user.role != "admin":
-        raise HTTPException(403, "Admin access required.")
-    users = db.query(User).order_by(User.id.desc()).all()
-    return [serialize_user(item) for item in users]
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required.",
+        )
+
+    users = (
+        db.query(User)
+        .order_by(User.id.desc())
+        .all()
+    )
+
+    return [
+        serialize_user(item)
+        for item in users
+    ]
 
 
 @router.patch("/users/{user_id}/role", response_model=UserOut)
@@ -133,21 +216,41 @@ def update_user_role(
     db: Session = Depends(get_db),
 ):
     if current_user.role != "admin":
-        raise HTTPException(403, "Admin access required.")
-    if user_id == current_user.id:
-        raise HTTPException(400, "Your own administrator role cannot be changed here.")
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required.",
+        )
 
-    target = db.query(User).filter(User.id == user_id).first()
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Your own administrator role cannot be changed here.",
+        )
+
+    target = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
     if not target:
-        raise HTTPException(404, "User not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
 
     target.role = data.role
 
     if data.role == "premium":
-        pending = db.query(SubscriptionRequest).filter(
-            SubscriptionRequest.user_id == target.id,
-            SubscriptionRequest.status == "pending",
-        ).all()
+        pending = (
+            db.query(SubscriptionRequest)
+            .filter(
+                SubscriptionRequest.user_id == target.id,
+                SubscriptionRequest.status == "pending",
+            )
+            .all()
+        )
+
         for item in pending:
             item.status = "approved"
             item.reviewed_at = datetime.utcnow()
@@ -155,7 +258,9 @@ def update_user_role(
 
     db.commit()
     db.refresh(target)
+
     return serialize_user(target)
+
 
 @router.delete("/users/{user_id}")
 def delete_user(
@@ -163,27 +268,42 @@ def delete_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete another user account and all user-owned financial data."""
     if current_user.role != "admin":
-        raise HTTPException(403, "Admin access required.")
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required.",
+        )
 
     if user_id == current_user.id:
-        raise HTTPException(400, "You cannot delete your own administrator account here.")
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own administrator account here.",
+        )
 
-    target = db.query(User).filter(User.id == user_id).first()
+    target = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
     if not target:
-        raise HTTPException(404, "User not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
 
-    # SubscriptionRequest has no ORM relationship on User, so clean it up
-    # explicitly before deleting the account. Reviewer references are nullable.
     db.query(SubscriptionRequest).filter(
         SubscriptionRequest.user_id == target.id
-    ).delete(synchronize_session=False)
+    ).delete(
+        synchronize_session=False
+    )
 
     db.query(SubscriptionRequest).filter(
         SubscriptionRequest.reviewed_by == target.id
     ).update(
-        {SubscriptionRequest.reviewed_by: None},
+        {
+            SubscriptionRequest.reviewed_by: None
+        },
         synchronize_session=False,
     )
 
@@ -194,4 +314,3 @@ def delete_user(
         "message": "User account deleted successfully.",
         "user_id": user_id,
     }
-
